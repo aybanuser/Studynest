@@ -20,7 +20,7 @@ internal sealed class StudyNestForm : Form
     private readonly Color accent = Color.FromArgb(75, 92, 207);
     private readonly List<Notebook> notebooks =
     [
-        new("Computer Science", "CS", Color.FromArgb(229, 235, 255), new("Binary Search Trees", "Review traversal, balancing, and common operations.")),
+        new("Computer Science", "CS", Color.FromArgb(255, 235, 255), new("Binary Search Trees", "Review traversal, balancing, and common operations.")),
         new("Data Structures", "DS", Color.FromArgb(231, 247, 239), new("Stacks & Queues", "LIFO and FIFO structures with practical examples.")),
         new("Software Design", "SD", Color.FromArgb(255, 242, 218), new("OOP Principles", "Encapsulation, abstraction, inheritance, and polymorphism."))
     ];
@@ -28,11 +28,14 @@ internal sealed class StudyNestForm : Form
     private Notebook selectedNotebook;
     private PageNote selectedPage;
     private Panel content = null!;
-    private Panel notebookList = null!;
+    private Panel sidebar = null!;
+    private FlowLayoutPanel notebookList = null!;
+    private Button addNotebookButton = null!;
     private Label notebookTitle = null!;
     private Label pageTitle = null!;
     private TextBox pageEditor = null!;
     private Panel drawingSurface = null!;
+    private System.Windows.Forms.Timer sidebarTimer = null!;
 
     public StudyNestForm()
     {
@@ -50,8 +53,24 @@ internal sealed class StudyNestForm : Form
     private void BuildShell()
     {
         var top = new Panel { Dock = DockStyle.Top, Height = 68, BackColor = Color.White };
-        top.Controls.Add(new Label { Text = "StudyNest", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ink, Location = new Point(28, 17), AutoSize = true });
-        top.Controls.Add(new Label { Text = "Your notes, in one place.", Font = new Font("Segoe UI", 9), ForeColor = muted, Location = new Point(145, 25), AutoSize = true });
+        var toggleSidebar = new Button { Text = "☰", Font = new Font("Segoe UI", 12), FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = ink, Location = new Point(18, 17), Size = new Size(34, 34), AccessibleName = "Toggle sidebar" };
+        toggleSidebar.FlatAppearance.BorderSize = 0;
+        sidebarTimer = new System.Windows.Forms.Timer { Interval = 10 };
+        sidebarTimer.Tick += (s, e) => {
+            if (sidebar.Width < 244) {
+                sidebar.Width += 20;
+                if (sidebar.Width > 244) sidebar.Width = 244;
+            } else {
+                sidebarTimer.Stop();
+            }
+        };
+        toggleSidebar.Click += (_, _) => {
+            if (sidebar.Width > 0) sidebar.Width = 0;
+            else sidebarTimer.Start();
+        };
+        top.Controls.Add(toggleSidebar);
+        top.Controls.Add(new Label { Text = "StudyNest", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = ink, Location = new Point(68, 11), AutoSize = true });
+        top.Controls.Add(new Label { Text = "Your notes, in one place.", Font = new Font("Segoe UI", 9), ForeColor = muted, Location = new Point(211, 25), AutoSize = true });
         var search = new TextBox { PlaceholderText = "Search notebooks and pages...", BorderStyle = BorderStyle.FixedSingle, Width = 270, Height = 32, Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 390, 18) };
         search.TextChanged += (_, _) => Search(search.Text);
         top.Controls.Add(search);
@@ -59,18 +78,17 @@ internal sealed class StudyNestForm : Form
         top.Controls.Add(avatar);
         Controls.Add(top);
 
-        var sidebar = new Panel { Dock = DockStyle.Left, Width = 244, BackColor = Color.FromArgb(249, 250, 252), Padding = new Padding(18, 18, 12, 18) };
+        sidebar = new Panel { Dock = DockStyle.Left, Width = 0, BackColor = Color.FromArgb(249, 250, 252), Padding = new Padding(18, 18, 12, 18) };
         sidebar.Controls.Add(new Label { Text = "WORKSPACE", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = muted, Location = new Point(20, 20), AutoSize = true });
         sidebar.Controls.Add(NavButton("All notes", 52, (_, _) => ShowPage()));
         sidebar.Controls.Add(NavButton("Study List", 91, (_, _) => ShowStudyList()));
         sidebar.Controls.Add(NavButton("Trash", 130, (_, _) => ShowTrash()));
         sidebar.Controls.Add(new Label { Text = "NOTEBOOKS", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = muted, Location = new Point(20, 188), AutoSize = true });
-        notebookList = new Panel { Location = new Point(12, 214), Size = new Size(214, 235), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true };
+        notebookList = new FlowLayoutPanel { Location = new Point(12, 214), Size = new Size(214, 235), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
         sidebar.Controls.Add(notebookList);
-        var add = new Button { Text = "+  New notebook", FlatStyle = FlatStyle.Flat, ForeColor = accent, BackColor = Color.White, Location = new Point(16, 462), Size = new Size(202, 38), Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right };
-        add.FlatAppearance.BorderColor = border;
-        add.Click += (_, _) => AddNotebook();
-        sidebar.Controls.Add(add);
+        addNotebookButton = new Button { Text = "+", TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, ForeColor = accent, BackColor = Color.White, Size = new Size(38, 38), Margin = new Padding(82, 4, 82, 4), AccessibleName = "Add notebook" };
+        addNotebookButton.FlatAppearance.BorderColor = border;
+        addNotebookButton.Click += (_, _) => AddNotebook();
         Controls.Add(sidebar);
         RefreshNotebooks();
 
@@ -89,15 +107,14 @@ internal sealed class StudyNestForm : Form
     private void RefreshNotebooks()
     {
         notebookList.Controls.Clear();
-        var y = 0;
         foreach (var notebook in notebooks)
         {
-            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}", TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Color.FromArgb(235, 238, 255) : Color.Transparent, ForeColor = ink, Location = new Point(0, y), Size = new Size(202, 38) };
+            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}", TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Color.FromArgb(235, 238, 255) : Color.Transparent, ForeColor = ink, Size = new Size(202, 38), Margin = new Padding(0, 0, 0, 4) };
             item.FlatAppearance.BorderSize = 0;
             item.Click += (_, _) => { selectedNotebook = notebook; selectedPage = notebook.Pages.FirstOrDefault() ?? new PageNote("Untitled page", "Start writing your notes here."); if (!notebook.Pages.Contains(selectedPage)) notebook.Pages.Add(selectedPage); RefreshNotebooks(); ShowPage(); };
             notebookList.Controls.Add(item);
-            y += 42;
         }
+        notebookList.Controls.Add(addNotebookButton);
     }
 
     private void ShowPage()
@@ -120,7 +137,7 @@ internal sealed class StudyNestForm : Form
         content.Controls.Add(pages);
         var divider = new Label { BorderStyle = BorderStyle.Fixed3D, Height = 2, Width = Width - 310, Location = new Point(34, 162), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         content.Controls.Add(divider);
-        pageTitle = new Label { Text = selectedPage.Title, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = ink, Location = new Point(34, 184), AutoSize = true };
+        pageTitle = new Label { Text = selectedPage.Title, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = ink, Location = new Point(34, 174), AutoSize = true };
         content.Controls.Add(pageTitle);
         var tools = new FlowLayoutPanel { Location = new Point(34, 236), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         AddTool(tools, "B", FontStyle.Bold, () => pageEditor.SelectedText = $"**{pageEditor.SelectedText}**");
