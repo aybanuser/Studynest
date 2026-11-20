@@ -152,6 +152,14 @@ internal sealed class StudyNestForm : Form
         pageEditor.TextChanged += (_, _) => selectedPage.Content = pageEditor.Text;
         content.Controls.Add(pageEditor);
         content.Controls.Add(new Label { Text = "Tip: select text, then use Highlight or Underline. Highlighted passages appear in Study List.", ForeColor = muted, Font = new Font("Segoe UI", 9), Location = new Point(34, 605), AutoSize = true });
+        if (selectedPage.Strokes.Count > 0)
+        {
+            content.Controls.Add(new Label { Text = "Saved drawing (click to edit)", ForeColor = muted, Font = new Font("Segoe UI", 9, FontStyle.Bold), Location = new Point(34, 634), AutoSize = true });
+            var preview = new CanvasPanel { Location = new Point(34, 658), Size = new Size(Width - 340, 170), BackColor = Color.FromArgb(252, 253, 255), BorderStyle = BorderStyle.FixedSingle, Cursor = Cursors.Hand, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            preview.Paint += (_, e) => DrawStrokesFit(e.Graphics, selectedPage.Strokes, preview.ClientSize);
+            preview.Click += (_, _) => ShowDrawing();
+            content.Controls.Add(preview);
+        }
     }
 
     private void AddTool(FlowLayoutPanel panel, string text, FontStyle style, Action action)
@@ -164,23 +172,103 @@ internal sealed class StudyNestForm : Form
 
     private void ShowDrawing()
     {
-        var dialog = new Form { Text = "Drawing block", Size = new Size(700, 500), StartPosition = FormStartPosition.CenterParent, BackColor = Color.White };
-        drawingSurface = new Panel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(252, 253, 255), Cursor = Cursors.Cross };
-        var points = new List<Point>();
-        drawingSurface.MouseDown += (_, e) => points.Add(e.Location);
-        drawingSurface.MouseMove += (_, e) => { if (e.Button == MouseButtons.Left) { points.Add(e.Location); drawingSurface.Invalidate(); } };
-        drawingSurface.Paint += (_, e) =>
+        // Work on a copy so "Save" decides whether the changes are kept.
+        var strokes = selectedPage.Strokes.Select(stroke => new List<Point>(stroke)).ToList();
+        List<Point>? current = null;
+
+        var dialog = new Form { Text = "Drawing block", Size = new Size(700, 540), StartPosition = FormStartPosition.CenterParent, BackColor = Color.White };
+        var surface = new CanvasPanel { Dock = DockStyle.Fill, BackColor = Color.FromArgb(252, 253, 255), Cursor = Cursors.Cross };
+        drawingSurface = surface;
+
+        // Every mouse press starts a NEW stroke, so lifting the mouse cuts the line.
+        surface.MouseDown += (_, e) =>
         {
-            if (points.Count <= 1) return;
-            using var pen = new Pen(accent, 3) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            for (var i = 1; i < points.Count; i++)
-                e.Graphics.DrawLine(pen, points[i - 1], points[i]);
+            if (e.Button != MouseButtons.Left) return;
+            current = [e.Location];
+            strokes.Add(current);
+            surface.Invalidate();
         };
-        var undo = new Button { Text = "Clear drawing", Dock = DockStyle.Bottom, Height = 36 };
-        undo.Click += (_, _) => { points.Clear(); drawingSurface.Invalidate(); };
-        dialog.Controls.Add(drawingSurface);
-        dialog.Controls.Add(undo);
-        dialog.ShowDialog(this);
+        surface.MouseMove += (_, e) =>
+        {
+            if (current is null || e.Button != MouseButtons.Left) return;
+            current.Add(e.Location);
+            surface.Invalidate();
+        };
+        surface.MouseUp += (_, _) => current = null;
+        surface.Paint += (_, e) => DrawStrokes(e.Graphics, strokes);
+
+        var bar = new Panel { Dock = DockStyle.Bottom, Height = 46, BackColor = Color.FromArgb(249, 250, 252), Padding = new Padding(8, 6, 8, 6) };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight };
+
+        var save = new Button { Text = "Save", Size = new Size(90, 32), FlatStyle = FlatStyle.Flat, BackColor = accent, ForeColor = Color.White };
+        save.FlatAppearance.BorderSize = 0;
+        save.Click += (_, _) =>
+        {
+            selectedPage.Strokes = strokes.Where(stroke => stroke.Count > 0).Select(stroke => new List<Point>(stroke)).ToList();
+            dialog.DialogResult = DialogResult.OK;
+        };
+
+        var undo = new Button { Text = "Undo line", Size = new Size(90, 32) };
+        undo.Click += (_, _) =>
+        {
+            if (strokes.Count > 0) strokes.RemoveAt(strokes.Count - 1);
+            surface.Invalidate();
+        };
+
+        var clear = new Button { Text = "Clear drawing", Size = new Size(100, 32) };
+        clear.Click += (_, _) => { strokes.Clear(); surface.Invalidate(); };
+
+        var exportPng = new Button { Text = "Save as PNG", Size = new Size(100, 32) };
+        exportPng.Click += (_, _) =>
+        {
+            using var saveDialog = new SaveFileDialog { Filter = "PNG image|*.png", FileName = "drawing.png" };
+            if (saveDialog.ShowDialog(dialog) != DialogResult.OK) return;
+            using var bitmap = new Bitmap(Math.Max(1, surface.ClientSize.Width), Math.Max(1, surface.ClientSize.Height));
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(Color.White);
+                DrawStrokes(g, strokes);
+            }
+            bitmap.Save(saveDialog.FileName, System.Drawing.Imaging.ImageFormat.Png);
+        };
+
+        buttons.Controls.AddRange([save, undo, clear, exportPng]);
+        bar.Controls.Add(buttons);
+        dialog.Controls.Add(surface);
+        dialog.Controls.Add(bar);
+
+        var saved = dialog.ShowDialog(this) == DialogResult.OK;
+        dialog.Dispose();
+        if (saved) ShowPage(); // refresh so the saved drawing shows on the page
+    }
+
+    private void DrawStrokes(Graphics g, List<List<Point>> strokes)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var pen = new Pen(accent, 3) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
+        using var dot = new SolidBrush(accent);
+        foreach (var stroke in strokes)
+        {
+            if (stroke.Count == 1)
+                g.FillEllipse(dot, stroke[0].X - 1.5f, stroke[0].Y - 1.5f, 3, 3);
+            else if (stroke.Count > 1)
+                g.DrawLines(pen, stroke.ToArray()); // one polyline per stroke, never joined to the next
+        }
+    }
+
+    private void DrawStrokesFit(Graphics g, List<List<Point>> strokes, Size target)
+    {
+        var all = strokes.SelectMany(stroke => stroke).ToList();
+        if (all.Count == 0) return;
+        int minX = all.Min(pt => pt.X), maxX = all.Max(pt => pt.X);
+        int minY = all.Min(pt => pt.Y), maxY = all.Max(pt => pt.Y);
+        float w = Math.Max(1, maxX - minX), h = Math.Max(1, maxY - minY);
+        const int pad = 12;
+        var scale = Math.Min(1f, Math.Min((target.Width - 2 * pad) / w, (target.Height - 2 * pad) / h));
+        g.TranslateTransform(pad + (target.Width - 2 * pad - w * scale) / 2, pad + (target.Height - 2 * pad - h * scale) / 2);
+        g.ScaleTransform(scale, scale);
+        g.TranslateTransform(-minX, -minY);
+        DrawStrokes(g, strokes);
     }
 
     private void ShowStudyList()
@@ -251,6 +339,11 @@ internal sealed class StudyNestForm : Form
         return dialog.ShowDialog() == DialogResult.OK ? input.Text : string.Empty;
     }
 
+    private sealed class CanvasPanel : Panel
+    {
+        public CanvasPanel() { DoubleBuffered = true; ResizeRedraw = true; }
+    }
+
     private sealed record Notebook(string Name, string Initials, Color Color, PageNote FirstPage)
     {
         public List<PageNote> Pages { get; } = [FirstPage];
@@ -261,6 +354,7 @@ internal sealed class StudyNestForm : Form
         public string Title { get; } = title;
         public string Content { get; set; } = content;
         public bool Deleted { get; set; }
+        public List<List<Point>> Strokes { get; set; } = [];
         public string Preview => Content.Length > 38 ? Content[..38] + "..." : Content;
     }
 }
