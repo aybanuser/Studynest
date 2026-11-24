@@ -27,8 +27,26 @@ internal sealed class StudyNestForm : Form
         Size = new Size(1280, 800);
         BackColor = Color.White;
         StartPosition = FormStartPosition.CenterScreen;
+        KeyPreview = true; // Enable form to capture key events
+        KeyDown += StudyNestForm_KeyDown;
         BuildShell();
         ShowPage();
+    }
+
+    private void StudyNestForm_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Control && e.KeyCode == Keys.S)
+        {
+            SaveCurrentPage();
+            e.Handled = true; // Mark as handled to prevent further processing
+        }
+    }
+
+    private void SaveCurrentPage()
+    {
+        // Data is bound to selectedPage.Content (set on TextChanged), 
+        // so no explicit service call needed.
+        MessageBox.Show("Page saved!", "StudyNest", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     private void BuildShell()
@@ -107,20 +125,26 @@ internal sealed class StudyNestForm : Form
         addPage.FlatAppearance.BorderSize = 0;
         addPage.Click += (_, _) => { selectedPage = service.AddPage(selectedNotebook); ShowPage(); };
         content.Controls.Add(addPage);
-        var pages = new FlowLayoutPanel { Location = new Point(30, 58), Size = new Size(Width - 300, 88), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, WrapContents = false };
+
+        var pageTabs = new FlowLayoutPanel { Location = new Point(30, 58), Size = new Size(Width - 300, 88), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, WrapContents = false };
         foreach (var page in selectedNotebook.Pages.Where(p => !p.Deleted))
         {
             var card = new Button { Text = page.Title + Environment.NewLine + "  " + page.Preview, TextAlign = ContentAlignment.TopLeft, FlatStyle = FlatStyle.Flat, BackColor = page == selectedPage ? Color.FromArgb(245, 246, 255) : Color.White, ForeColor = Theme.Ink, Size = new Size(210, 74), Margin = new Padding(0, 0, 10, 0), Padding = new Padding(12, 10, 8, 4) };
             card.FlatAppearance.BorderColor = page == selectedPage ? Theme.Accent : Theme.Border;
             card.Click += (_, _) => { selectedPage = page; ShowPage(); };
-            pages.Controls.Add(card);
+            pageTabs.Controls.Add(card);
         }
-        content.Controls.Add(pages);
+        var addPageTab = new Button { Text = "+", FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Theme.Accent, Size = new Size(74, 74), Margin = new Padding(0, 0, 10, 0) };
+        addPageTab.FlatAppearance.BorderColor = Theme.Border;
+        addPageTab.Click += (_, _) => { selectedPage = service.AddPage(selectedNotebook); ShowPage(); };
+        pageTabs.Controls.Add(addPageTab);
+        content.Controls.Add(pageTabs);
+
         var divider = new Label { BorderStyle = BorderStyle.Fixed3D, Height = 2, Width = Width - 310, Location = new Point(34, 162), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         content.Controls.Add(divider);
         pageTitle = new Label { Text = selectedPage.Title, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = Theme.Ink, Location = new Point(34, 174), AutoSize = true };
         content.Controls.Add(pageTitle);
-        var tools = new FlowLayoutPanel { Location = new Point(34, 236), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var tools = new FlowLayoutPanel { Location = new Point(34, 226), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         AddTool(tools, "B", FontStyle.Bold, () => pageEditor.SelectedText = $"**{pageEditor.SelectedText}**");
         AddTool(tools, "I", FontStyle.Italic, () => pageEditor.SelectedText = $"_{pageEditor.SelectedText}_");
         AddTool(tools, "Highlight", FontStyle.Regular, () => pageEditor.SelectedText = $"=={pageEditor.SelectedText}==");
