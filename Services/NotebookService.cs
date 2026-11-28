@@ -51,12 +51,17 @@ public sealed class NotebookService
         return notebook.Pages.Where(p => !p.Deleted && p.HasHighlights);
     }
 
-    /// <summary>Finds the first page (not in Trash) whose title or text contains the query.</summary>
-    public SearchResult? FindFirstMatch(string query)
+    /// <summary>
+    /// Finds the first page (not in Trash) whose title or text contains the query.
+    /// Pages for which isHidden returns true (locked pages) are skipped.
+    /// </summary>
+    public SearchResult? FindFirstMatch(string query, Func<Notebook, PageNote, bool>? isHidden = null)
     {
         foreach (var notebook in Notebooks)
         {
             var page = notebook.Pages.FirstOrDefault(p => !p.Deleted &&
+                // Skip locked pages (isHidden is null when no lock check is given, so nothing is skipped).
+                !(isHidden?.Invoke(notebook, p) ?? false) &&
                 (p.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
                  p.Content.Contains(query, StringComparison.OrdinalIgnoreCase)));
             if (page is not null) return new SearchResult(notebook, page);

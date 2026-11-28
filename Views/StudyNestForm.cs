@@ -6,6 +6,9 @@ namespace StudyNest.Views;
 internal sealed class StudyNestForm : Form
 {
     private readonly NotebookService service = new();
+    // LOCK: locks = the locking rules. lockUi = builds the lock buttons and unlock screens.
+    private readonly LockService locks = new();
+    private readonly LockUi lockUi;
 
     private Notebook selectedNotebook;
     private PageNote selectedPage;
@@ -29,6 +32,7 @@ internal sealed class StudyNestForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true; // Enable form to capture key events
         KeyDown += StudyNestForm_KeyDown;
+        lockUi = new LockUi(locks, this); // LOCK: must be created before BuildShell/ShowPage use it
         BuildShell();
         ShowPage();
     }
@@ -108,7 +112,8 @@ internal sealed class StudyNestForm : Form
         notebookList.Controls.Clear();
         foreach (var notebook in service.Notebooks)
         {
-            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}", TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Color.FromArgb(235, 238, 255) : Color.Transparent, ForeColor = Theme.Ink, Size = new Size(202, 38), Margin = new Padding(0, 0, 0, 4) };
+            // LOCK: add a 🔒 after the name of any notebook that has a password.
+            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}" + (locks.HasLock(notebook) ? "  🔒" : ""), TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Color.FromArgb(235, 238, 255) : Color.Transparent, ForeColor = Theme.Ink, Size = new Size(202, 38), Margin = new Padding(0, 0, 0, 4) };
             item.FlatAppearance.BorderSize = 0;
             item.Click += (_, _) => { selectedNotebook = notebook; selectedPage = service.GetFirstActivePage(notebook); RefreshNotebooks(); ShowPage(); };
             notebookList.Controls.Add(item);
@@ -116,20 +121,42 @@ internal sealed class StudyNestForm : Form
         notebookList.Controls.Add(addNotebookButton);
     }
 
+    // LOCK: redraw the sidebar (🔒 icons) AND the page. Used after any lock change or unlock.
+    private void RefreshAll()
+    {
+        RefreshNotebooks(); // updates the 🔒 icons in the sidebar
+        ShowPage();
+    }
+
     private void ShowPage()
     {
         content.Controls.Clear();
         notebookTitle = new Label { Text = selectedNotebook.Name, Font = new Font("Segoe UI", 10), ForeColor = Theme.Muted, Location = new Point(34, 26), AutoSize = true };
         content.Controls.Add(notebookTitle);
+
+        // LOCK: locked notebook -> show only the unlock screen and stop. No page info is drawn, so nothing leaks.
+        if (locks.IsLocked(selectedNotebook))
+        {
+            lockUi.AddLockedScreen(content, "notebook", selectedNotebook.Name, selectedNotebook, 110, RefreshAll);
+            return;
+        }
+
         var addPage = new Button { Text = "+ New page", FlatStyle = FlatStyle.Flat, BackColor = Theme.Accent, ForeColor = Color.White, Size = new Size(110, 34), Location = new Point(Width - 190, 18), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         addPage.FlatAppearance.BorderSize = 0;
         addPage.Click += (_, _) => { selectedPage = service.AddPage(selectedNotebook); ShowPage(); };
         content.Controls.Add(addPage);
 
+        // LOCK: menu button (Set password / Lock now / Remove lock) for the whole notebook.
+        var notebookLock = lockUi.CreateMenuButton("Notebook lock", "this notebook", selectedNotebook, RefreshAll);
+        notebookLock.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        notebookLock.Location = new Point(Width - 345, 19);
+        content.Controls.Add(notebookLock);
+
         var pageTabs = new FlowLayoutPanel { Location = new Point(30, 58), Size = new Size(Width - 300, 88), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, WrapContents = false };
         foreach (var page in selectedNotebook.Pages.Where(p => !p.Deleted))
         {
-            var card = new Button { Text = page.Title + Environment.NewLine + "  " + page.Preview, TextAlign = ContentAlignment.TopLeft, FlatStyle = FlatStyle.Flat, BackColor = page == selectedPage ? Color.FromArgb(245, 246, 255) : Color.White, ForeColor = Theme.Ink, Size = new Size(210, 74), Margin = new Padding(0, 0, 10, 0), Padding = new Padding(12, 10, 8, 4) };
+            // LOCK: a locked page shows "🔒 Locked" instead of its text preview.
+            var card = new Button { Text = page.Title + Environment.NewLine + "  " + (locks.IsLocked(page) ? "🔒 Locked" : page.Preview), TextAlign = ContentAlignment.TopLeft, FlatStyle = FlatStyle.Flat, BackColor = page == selectedPage ? Color.FromArgb(245, 246, 255) : Color.White, ForeColor = Theme.Ink, Size = new Size(210, 74), Margin = new Padding(0, 0, 10, 0), Padding = new Padding(12, 10, 8, 4) };
             card.FlatAppearance.BorderColor = page == selectedPage ? Theme.Accent : Theme.Border;
             card.Click += (_, _) => { selectedPage = page; ShowPage(); };
             pageTabs.Controls.Add(card);
@@ -142,6 +169,14 @@ internal sealed class StudyNestForm : Form
 
         var divider = new Label { BorderStyle = BorderStyle.Fixed3D, Height = 2, Width = Width - 310, Location = new Point(34, 162), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         content.Controls.Add(divider);
+
+        // LOCK: locked page -> show only the unlock screen (below the tabs) and stop. Title, editor and drawing stay hidden.
+        if (locks.IsLocked(selectedPage))
+        {
+            lockUi.AddLockedScreen(content, "page", selectedPage.Title, selectedPage, 190, RefreshAll);
+            return;
+        }
+
         pageTitle = new Label { Text = selectedPage.Title, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = Theme.Ink, Location = new Point(34, 174), AutoSize = true };
         content.Controls.Add(pageTitle);
         var tools = new FlowLayoutPanel { Location = new Point(34, 226), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
@@ -151,6 +186,8 @@ internal sealed class StudyNestForm : Form
         AddTool(tools, "Underline", FontStyle.Underline, () => pageEditor.SelectedText = $"__{pageEditor.SelectedText}__");
         AddTool(tools, "Draw", FontStyle.Regular, ShowDrawing);
         AddTool(tools, "Move to trash", FontStyle.Regular, () => { service.MoveToTrash(selectedPage); ShowPage(); });
+        // LOCK: menu button (Set password / Lock now / Remove lock) for this page, at the end of the toolbar.
+        tools.Controls.Add(lockUi.CreateMenuButton("Page lock", "this page", selectedPage, RefreshAll));
         content.Controls.Add(tools);
         pageEditor = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 12), ForeColor = Theme.Ink, Location = new Point(34, 290), Size = new Size(Width - 340, 300), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         pageEditor.Text = selectedPage.Content;
@@ -188,8 +225,15 @@ internal sealed class StudyNestForm : Form
         content.Controls.Clear();
         content.Controls.Add(new Label { Text = "Study List", Font = new Font("Segoe UI", 24, FontStyle.Bold), ForeColor = Theme.Ink, Location = new Point(34, 28), AutoSize = true });
         content.Controls.Add(new Label { Text = "Review the important passages from " + selectedNotebook.Name, ForeColor = Theme.Muted, Location = new Point(36, 76), AutoSize = true });
+        // LOCK: a locked notebook must not reveal its highlights.
+        if (locks.IsLocked(selectedNotebook))
+        {
+            content.Controls.Add(new Label { Text = "This notebook is locked. Unlock it to see its study list.", ForeColor = Theme.Muted, Location = new Point(36, 125), AutoSize = true });
+            return;
+        }
         var y = 125;
-        foreach (var page in service.GetHighlightedPages(selectedNotebook))
+        // LOCK: also skip individual locked pages in an unlocked notebook.
+        foreach (var page in service.GetHighlightedPages(selectedNotebook).Where(p => !locks.IsLocked(p)))
         {
             var text = page.StudyText;
             var card = new Label { Text = text + Environment.NewLine + "From: " + page.Title, AutoSize = false, Size = new Size(Width - 370, 75), Location = new Point(34, y), Padding = new Padding(16), BackColor = Color.FromArgb(255, 251, 229), ForeColor = Theme.Ink, Font = new Font("Segoe UI", 11) };
@@ -206,9 +250,12 @@ internal sealed class StudyNestForm : Form
         var y = 100;
         foreach (var page in service.GetTrash())
         {
+            // LOCK: find the page's notebook, then show "🔒 Locked page" instead of the title if either one is locked.
+            var owner = service.Notebooks.First(n => n.Pages.Contains(page));
+            var title = locks.IsHidden(owner, page) ? "🔒 Locked page" : page.Title;
             var restore = new Button { Text = "Restore", Location = new Point(500, y), Size = new Size(90, 30) };
             restore.Click += (_, _) => { service.Restore(page); ShowTrash(); };
-            content.Controls.Add(new Label { Text = page.Title, Location = new Point(38, y + 7), AutoSize = true });
+            content.Controls.Add(new Label { Text = title, Location = new Point(38, y + 7), AutoSize = true });
             content.Controls.Add(restore);
             y += 48;
         }
@@ -218,7 +265,8 @@ internal sealed class StudyNestForm : Form
     private void Search(string query)
     {
         if (string.IsNullOrWhiteSpace(query)) return;
-        var result = service.FindFirstMatch(query);
+        // LOCK: locks.IsHidden makes search skip locked pages, so their text can't be found.
+        var result = service.FindFirstMatch(query, locks.IsHidden);
         if (result is null) return;
         selectedNotebook = result.Notebook;
         selectedPage = result.Page;
