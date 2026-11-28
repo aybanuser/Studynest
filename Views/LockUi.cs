@@ -35,6 +35,7 @@ internal sealed class LockUi(LockService locks, Form owner)
             Padding = new Padding(8, 0, 8, 0)
         };
         button.FlatAppearance.BorderColor = Theme.Border;
+        button.FlatAppearance.MouseOverBackColor = Theme.SoftAccent;
 
         // The menu's items depend on the state when the screen was built.
         // That is fine because every action calls refresh(), which rebuilds the screen.
@@ -71,6 +72,7 @@ internal sealed class LockUi(LockService locks, Form owner)
         var box = new TextBox { UseSystemPasswordChar = true, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 11), Width = 260, Location = new Point(36, top + 96) };
         var unlock = new Button { Text = "Unlock", FlatStyle = FlatStyle.Flat, BackColor = Theme.Accent, ForeColor = Color.White, Size = new Size(100, 30), Location = new Point(312, top + 94) };
         unlock.FlatAppearance.BorderSize = 0;
+        unlock.FlatAppearance.MouseOverBackColor = Theme.SidebarHover;
         var error = new Label { ForeColor = Color.Firebrick, Location = new Point(36, top + 134), AutoSize = true };
 
         // Shared by the button click and the Enter key (a "local function").

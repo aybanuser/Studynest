@@ -28,7 +28,7 @@ internal sealed class StudyNestForm : Form
         Text = "StudyNest";
         MinimumSize = new Size(1080, 700);
         Size = new Size(1280, 800);
-        BackColor = Color.White;
+        BackColor = Theme.Workspace;
         StartPosition = FormStartPosition.CenterScreen;
         KeyPreview = true; // Enable form to capture key events
         KeyDown += StudyNestForm_KeyDown;
@@ -74,23 +74,24 @@ internal sealed class StudyNestForm : Form
         top.Controls.Add(toggleSidebar);
         top.Controls.Add(new Label { Text = "StudyNest", Font = new Font("Segoe UI", 18, FontStyle.Bold), ForeColor = Theme.Ink, Location = new Point(68, 11), AutoSize = true });
         top.Controls.Add(new Label { Text = "Your notes, in one place.", Font = new Font("Segoe UI", 9), ForeColor = Theme.Muted, Location = new Point(211, 25), AutoSize = true });
-        var search = new TextBox { PlaceholderText = "Search notebooks and pages...", BorderStyle = BorderStyle.FixedSingle, Width = 270, Height = 32, Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 390, 18) };
+        var search = new TextBox { PlaceholderText = "Search notebooks and pages...", BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.SoftAccent, ForeColor = Theme.Ink, Width = 270, Height = 32, Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 390, 18) };
         search.TextChanged += (_, _) => Search(search.Text);
         top.Controls.Add(search);
         var avatar = new Label { Text = "A", TextAlign = ContentAlignment.MiddleCenter, BackColor = Color.FromArgb(238, 241, 255), ForeColor = Theme.Accent, Font = new Font("Segoe UI", 10, FontStyle.Bold), Size = new Size(34, 34), Anchor = AnchorStyles.Top | AnchorStyles.Right, Location = new Point(Width - 78, 17) };
         top.Controls.Add(avatar);
         Controls.Add(top);
 
-        sidebar = new Panel { Dock = DockStyle.Left, Width = 0, BackColor = Color.FromArgb(249, 250, 252), Padding = new Padding(18, 18, 12, 18) };
-        sidebar.Controls.Add(new Label { Text = "WORKSPACE", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Theme.Muted, Location = new Point(20, 20), AutoSize = true });
+        sidebar = new Panel { Dock = DockStyle.Left, Width = 244, BackColor = Theme.Sidebar, Padding = new Padding(18, 18, 12, 18) };
+        sidebar.Controls.Add(new Label { Text = "WORKSPACE", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Theme.SidebarMuted, Location = new Point(20, 20), AutoSize = true });
         sidebar.Controls.Add(NavButton("All notes", 52, (_, _) => ShowPage()));
         sidebar.Controls.Add(NavButton("Study List", 91, (_, _) => ShowStudyList()));
         sidebar.Controls.Add(NavButton("Trash", 130, (_, _) => ShowTrash()));
-        sidebar.Controls.Add(new Label { Text = "NOTEBOOKS", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Theme.Muted, Location = new Point(20, 188), AutoSize = true });
-        notebookList = new FlowLayoutPanel { Location = new Point(12, 214), Size = new Size(214, 235), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false };
+        sidebar.Controls.Add(new Label { Text = "NOTEBOOKS", Font = new Font("Segoe UI", 8, FontStyle.Bold), ForeColor = Theme.SidebarMuted, Location = new Point(20, 188), AutoSize = true });
+        notebookList = new FlowLayoutPanel { Location = new Point(12, 214), Size = new Size(214, 235), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Theme.Sidebar };
         sidebar.Controls.Add(notebookList);
         addNotebookButton = new Button { Text = "+", TextAlign = ContentAlignment.MiddleCenter, FlatStyle = FlatStyle.Flat, ForeColor = Theme.Accent, BackColor = Color.White, Size = new Size(38, 38), Margin = new Padding(82, 4, 82, 4), AccessibleName = "Add notebook" };
         addNotebookButton.FlatAppearance.BorderColor = Theme.Border;
+        addNotebookButton.FlatAppearance.MouseOverBackColor = Theme.SoftAccent;
         addNotebookButton.Click += (_, _) => AddNotebook();
         Controls.Add(sidebar);
         RefreshNotebooks();
@@ -101,8 +102,9 @@ internal sealed class StudyNestForm : Form
 
     private Button NavButton(string text, int top, EventHandler action)
     {
-        var button = new Button { Text = "   " + text, TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, ForeColor = Theme.Ink, BackColor = Color.Transparent, Location = new Point(12, top), Size = new Size(210, 34) };
+        var button = new Button { Text = "   " + text, TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, ForeColor = Color.White, BackColor = Color.Transparent, Location = new Point(12, top), Size = new Size(210, 34) };
         button.FlatAppearance.BorderSize = 0;
+        button.FlatAppearance.MouseOverBackColor = Theme.SidebarHover;
         button.Click += action;
         return button;
     }
@@ -113,8 +115,9 @@ internal sealed class StudyNestForm : Form
         foreach (var notebook in service.Notebooks)
         {
             // LOCK: add a 🔒 after the name of any notebook that has a password.
-            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}" + (locks.HasLock(notebook) ? "  🔒" : ""), TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Color.FromArgb(235, 238, 255) : Color.Transparent, ForeColor = Theme.Ink, Size = new Size(202, 38), Margin = new Padding(0, 0, 0, 4) };
+            var item = new Button { Text = $"  {notebook.Initials}    {notebook.Name}" + (locks.HasLock(notebook) ? "  🔒" : ""), TextAlign = ContentAlignment.MiddleLeft, FlatStyle = FlatStyle.Flat, BackColor = notebook == selectedNotebook ? Theme.SidebarHover : Color.Transparent, ForeColor = Color.White, Size = new Size(202, 38), Margin = new Padding(0, 0, 0, 4) };
             item.FlatAppearance.BorderSize = 0;
+            item.FlatAppearance.MouseOverBackColor = Theme.SidebarHover;
             item.Click += (_, _) => { selectedNotebook = notebook; selectedPage = service.GetFirstActivePage(notebook); RefreshNotebooks(); ShowPage(); };
             notebookList.Controls.Add(item);
         }
@@ -143,6 +146,7 @@ internal sealed class StudyNestForm : Form
 
         var addPage = new Button { Text = "+ New page", FlatStyle = FlatStyle.Flat, BackColor = Theme.Accent, ForeColor = Color.White, Size = new Size(110, 34), Location = new Point(Width - 190, 18), Anchor = AnchorStyles.Top | AnchorStyles.Right };
         addPage.FlatAppearance.BorderSize = 0;
+        addPage.FlatAppearance.MouseOverBackColor = Theme.SidebarHover;
         addPage.Click += (_, _) => { selectedPage = service.AddPage(selectedNotebook); ShowPage(); };
         content.Controls.Add(addPage);
 
@@ -152,22 +156,24 @@ internal sealed class StudyNestForm : Form
         notebookLock.Location = new Point(Width - 345, 19);
         content.Controls.Add(notebookLock);
 
-        var pageTabs = new FlowLayoutPanel { Location = new Point(30, 58), Size = new Size(Width - 300, 88), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, WrapContents = false };
+        var pageTabs = new FlowLayoutPanel { Location = new Point(30, 58), Size = new Size(Width - 300, 88), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, AutoScroll = true, WrapContents = false, BackColor = Theme.Workspace };
         foreach (var page in selectedNotebook.Pages.Where(p => !p.Deleted))
         {
             // LOCK: a locked page shows "🔒 Locked" instead of its text preview.
-            var card = new Button { Text = page.Title + Environment.NewLine + "  " + (locks.IsLocked(page) ? "🔒 Locked" : page.Preview), TextAlign = ContentAlignment.TopLeft, FlatStyle = FlatStyle.Flat, BackColor = page == selectedPage ? Color.FromArgb(245, 246, 255) : Color.White, ForeColor = Theme.Ink, Size = new Size(210, 74), Margin = new Padding(0, 0, 10, 0), Padding = new Padding(12, 10, 8, 4) };
+            var card = new Button { Text = page.Title + Environment.NewLine + "  " + (locks.IsLocked(page) ? "🔒 Locked" : page.Preview), TextAlign = ContentAlignment.TopLeft, FlatStyle = FlatStyle.Flat, BackColor = page == selectedPage ? Theme.SoftAccent : Color.White, ForeColor = Theme.Ink, Size = new Size(210, 74), Margin = new Padding(0, 0, 10, 0), Padding = new Padding(12, 10, 8, 4) };
             card.FlatAppearance.BorderColor = page == selectedPage ? Theme.Accent : Theme.Border;
+            card.FlatAppearance.MouseOverBackColor = Theme.SoftAccent;
             card.Click += (_, _) => { selectedPage = page; ShowPage(); };
             pageTabs.Controls.Add(card);
         }
         var addPageTab = new Button { Text = "+", FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Theme.Accent, Size = new Size(74, 74), Margin = new Padding(0, 0, 10, 0) };
         addPageTab.FlatAppearance.BorderColor = Theme.Border;
+        addPageTab.FlatAppearance.MouseOverBackColor = Theme.SoftAccent;
         addPageTab.Click += (_, _) => { selectedPage = service.AddPage(selectedNotebook); ShowPage(); };
         pageTabs.Controls.Add(addPageTab);
         content.Controls.Add(pageTabs);
 
-        var divider = new Label { BorderStyle = BorderStyle.Fixed3D, Height = 2, Width = Width - 310, Location = new Point(34, 162), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var divider = new Label { BorderStyle = BorderStyle.None, BackColor = Theme.Border, Height = 2, Width = Width - 310, Location = new Point(34, 162), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         content.Controls.Add(divider);
 
         // LOCK: locked page -> show only the unlock screen (below the tabs) and stop. Title, editor and drawing stay hidden.
@@ -179,7 +185,7 @@ internal sealed class StudyNestForm : Form
 
         pageTitle = new Label { Text = selectedPage.Title, Font = new Font("Segoe UI", 32, FontStyle.Bold), ForeColor = Theme.Ink, Location = new Point(34, 174), AutoSize = true };
         content.Controls.Add(pageTitle);
-        var tools = new FlowLayoutPanel { Location = new Point(34, 226), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        var tools = new FlowLayoutPanel { Location = new Point(34, 226), Size = new Size(Width - 310, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Theme.Workspace };
         AddTool(tools, "B", FontStyle.Bold, () => pageEditor.SelectedText = $"**{pageEditor.SelectedText}**");
         AddTool(tools, "I", FontStyle.Italic, () => pageEditor.SelectedText = $"_{pageEditor.SelectedText}_");
         AddTool(tools, "Highlight", FontStyle.Regular, () => pageEditor.SelectedText = $"=={pageEditor.SelectedText}==");
@@ -189,7 +195,7 @@ internal sealed class StudyNestForm : Form
         // LOCK: menu button (Set password / Lock now / Remove lock) for this page, at the end of the toolbar.
         tools.Controls.Add(lockUi.CreateMenuButton("Page lock", "this page", selectedPage, RefreshAll));
         content.Controls.Add(tools);
-        pageEditor = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 12), ForeColor = Theme.Ink, Location = new Point(34, 290), Size = new Size(Width - 340, 300), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+        pageEditor = new TextBox { Multiline = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.FixedSingle, Font = new Font("Segoe UI", 12), ForeColor = Theme.Ink, BackColor = Theme.Workspace, Location = new Point(34, 290), Size = new Size(Width - 340, 300), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
         pageEditor.Text = selectedPage.Content;
         pageEditor.TextChanged += (_, _) => selectedPage.Content = pageEditor.Text;
         content.Controls.Add(pageEditor);
@@ -216,6 +222,7 @@ internal sealed class StudyNestForm : Form
     {
         var button = new Button { Text = text, AutoSize = true, Height = 32, FlatStyle = FlatStyle.Flat, BackColor = Color.White, ForeColor = Theme.Ink, Font = new Font("Segoe UI", 9, style), Padding = new Padding(8, 0, 8, 0) };
         button.FlatAppearance.BorderColor = Theme.Border;
+        button.FlatAppearance.MouseOverBackColor = Theme.SoftAccent;
         button.Click += (_, _) => action();
         panel.Controls.Add(button);
     }
@@ -236,7 +243,7 @@ internal sealed class StudyNestForm : Form
         foreach (var page in service.GetHighlightedPages(selectedNotebook).Where(p => !locks.IsLocked(p)))
         {
             var text = page.StudyText;
-            var card = new Label { Text = text + Environment.NewLine + "From: " + page.Title, AutoSize = false, Size = new Size(Width - 370, 75), Location = new Point(34, y), Padding = new Padding(16), BackColor = Color.FromArgb(255, 251, 229), ForeColor = Theme.Ink, Font = new Font("Segoe UI", 11) };
+            var card = new Label { Text = text + Environment.NewLine + "From: " + page.Title, AutoSize = false, Size = new Size(Width - 370, 75), Location = new Point(34, y), Padding = new Padding(16), BackColor = Theme.SoftAccent, ForeColor = Theme.Ink, Font = new Font("Segoe UI", 11) };
             content.Controls.Add(card);
             y += 88;
         }
